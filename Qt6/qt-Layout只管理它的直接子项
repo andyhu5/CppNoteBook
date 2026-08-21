@@ -1,0 +1,194 @@
+这里需要区分 **Layout 管理的对象** 和 **对象内部使用 anchors 管理子对象**。
+
+你的代码：
+
+```qml
+RowLayout {
+    anchors.fill: parent
+
+    ListView {
+        Layout.preferredWidth: 150
+        Layout.fillHeight: true
+    }
+
+    Rectangle {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+
+        color:"lightgray"
+
+        Loader {
+            anchors.fill: parent
+            id: loader
+            active: false
+        }
+    }
+}
+```
+
+实际层级关系：
+
+```
+RowLayout
+│
+├── ListView
+│     ↑
+│     Layout 管理它的宽高
+│
+└── Rectangle
+      ↑
+      Layout 管理它的宽高
+      │
+      └── Loader
+            ↑
+            anchors 管理它的宽高
+```
+
+关键点：
+
+**RowLayout 只管理它的直接子项。**
+
+也就是说：
+
+```qml
+RowLayout
+    ├── ListView        <-- Layout 管理
+    └── Rectangle       <-- Layout 管理
+```
+
+但是：
+
+```qml
+Rectangle
+    └── Loader          <-- Rectangle 内部自己管理
+```
+
+`Loader` 不是 `RowLayout` 的直接 child，所以 `RowLayout` 不会管它。
+
+------
+
+### 为什么 `Loader` 可以使用 `anchors.fill`？
+
+因为 `Loader` 的父对象是：
+
+```qml
+Rectangle
+```
+
+而不是：
+
+```qml
+RowLayout
+```
+
+在 QML 中：
+
+```qml
+anchors.fill: parent
+```
+
+表示：
+
+```qml
+loader.width = rectangle.width
+loader.height = rectangle.height
+loader.x = 0
+loader.y = 0
+```
+
+它填充的是：
+
+```qml
+Rectangle {
+    Layout.fillWidth: true
+    Layout.fillHeight: true
+
+    Loader {
+        anchors.fill: parent
+    }
+}
+```
+
+即：
+
+```
+RowLayout
++--------------------------------+
+|                                |
+| ListView | Rectangle            |
+| 150px    |                      |
+|          | +----------------+   |
+|          | | Loader         |   |
+|          | |                |   |
+|          | +----------------+   |
+|                                |
++--------------------------------+
+```
+
+------
+
+### 如果直接这样写会冲突：
+
+例如：
+
+```qml
+RowLayout {
+
+    Loader {
+        Layout.fillWidth: true
+        anchors.fill: parent
+    }
+}
+```
+
+这里冲突，因为：
+
+- `RowLayout` 想控制 Loader 的尺寸
+- `anchors` 又想控制 Loader 的尺寸
+
+两个布局系统同时管理同一个对象。
+
+------
+
+### QML Layout 的一个重要规则
+
+可以记：
+
+> Layout 管理直接子项，anchors 管理普通父子关系。
+
+合法：
+
+```qml
+ColumnLayout {
+
+    Rectangle {
+        Layout.fillWidth: true
+
+        Loader {
+            anchors.fill: parent
+        }
+    }
+}
+```
+
+不冲突。
+
+------
+
+你这个结构实际上是 Qt Quick 中非常常见的写法：
+
+```
+Window
+ |
+ RowLayout
+ |
+ +-- ListView          (Layout控制)
+ |
+ +-- Container Item    (Layout控制)
+        |
+        Loader         (anchors控制)
+              |
+              Page.qml (anchors控制)
+```
+
+这种方式也是动态页面加载（类似 IDE 主工作区、设置页、详情页）的典型结构。

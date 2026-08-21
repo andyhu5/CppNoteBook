@@ -1,4 +1,4 @@
-# std::views::stride 
+# std::views::stride  (每隔 step - 1 个元素取一个)
 
 以下是 std::views::stride 的完整解释，包含补充内容：
 

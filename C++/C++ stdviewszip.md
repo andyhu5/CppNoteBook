@@ -1,4 +1,4 @@
-# std::views::zip 
+# std::views::zip {压缩成一个tuple-like的数据}
 
 The C++23 std::views::zip produces a view of **tuple-like** elements, each consisting of the corresponding elements from all the adapted views.
 

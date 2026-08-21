@@ -1,0 +1,472 @@
+在 QML 中，`Transition` 和 `Animation` 属于两个不同层级的概念：
+
+- **Animation（动画）**：描述「某个属性如何随时间变化」。
+- **Transition（过渡）**：描述「某个状态变化或视图变化时，应该使用哪些 Animation」。
+
+简单说：
+
+> Animation 是执行者，Transition 是调度规则。
+
+------
+
+### 1. `NumberAnimation` 本身是什么？
+
+例如：
+
+```qml
+NumberAnimation {
+    properties: "x,y"
+    duration: 300
+}
+```
+
+它定义：
+
+- 哪些属性变化：`x`, `y`
+- 怎么变化：线性、缓动、弹性等
+- 持续时间：300ms
+
+但是它不知道：
+
+- 什么时候执行？
+- 谁触发它？
+
+它只是一个动画模板。
+
+例如：
+
+```qml
+Rectangle {
+    id: rect
+
+    NumberAnimation {
+        target: rect
+        property: "x"
+        to: 300
+        duration: 1000
+    }
+}
+```
+
+这里可以直接运行：
+
+```qml
+rect.x = 300
+```
+
+或者：
+
+```qml
+animation.start()
+```
+
+------
+
+### 2. `Transition` 是什么时候使用？
+
+`Transition` 本身不会产生动画。
+
+它需要一个事件触发。
+
+例如 QML State：
+
+```qml
+Rectangle {
+    id: box
+
+    width: 100
+
+    states: [
+        State {
+            name: "big"
+
+            PropertyChanges {
+                target: box
+                width: 300
+            }
+        }
+    ]
+
+    transitions: [
+        Transition {
+            NumberAnimation {
+                property: "width"
+                duration: 500
+            }
+        }
+    ]
+}
+```
+
+流程：
+
+```
+state normal
+      |
+      | 切换
+      ↓
+state big
+
+width:
+100 -----> 300
+
+Transition 捕获变化
+
+调用 NumberAnimation
+
+产生动画
+```
+
+所以：
+
+```
+Transition
+    |
+    +-- NumberAnimation
+    +-- ColorAnimation
+    +-- RotationAnimation
+```
+
+------
+
+## 3. ListView 为什么有很多 Transition？
+
+你的代码：
+
+```qml
+ListView {
+
+    displaced: displacedTransition
+    add: addTransition
+    remove: removeTransition
+    move: moveTransition
+}
+```
+
+这些不是普通状态变化，而是 **ListView 的内部操作事件**。
+
+ListView 管理的是：
+
+```
+Model
+ |
+ ↓
+Delegate Item
+ |
+ ↓
+位置计算
+```
+
+当数据变化：
+
+例如：
+
+原来：
+
+```
+A  y=0
+B  y=50
+C  y=100
+```
+
+删除 B：
+
+```
+A  y=0
+C  y=50
+```
+
+C 的位置发生变化。
+
+ListView 会产生不同事件：
+
+------
+
+### add
+
+新增 delegate：
+
+```qml
+add: addTransition
+```
+
+例如：
+
+```
+A
+B
+C
+
+insert D
+
+A
+B
+C
+D
+```
+
+D 创建出来。
+
+动画：
+
+```
+opacity 0 -> 1
+scale 0 -> 1
+```
+
+例如：
+
+```qml
+Transition {
+    NumberAnimation {
+        properties: "opacity"
+        duration: 300
+    }
+}
+```
+
+------
+
+### remove
+
+删除：
+
+```qml
+remove: removeTransition
+```
+
+例如：
+
+```
+A
+B
+C
+
+remove B
+```
+
+B 消失。
+
+动画：
+
+```
+opacity 1 -> 0
+scale 1 -> 0
+```
+
+------
+
+### move
+
+移动：
+
+```qml
+move: moveTransition
+```
+
+例如：
+
+排序：
+
+```
+A
+B
+C
+
+move C to top
+
+C
+A
+B
+```
+
+需要移动动画：
+
+```qml
+NumberAnimation {
+    properties:"x,y"
+}
+```
+
+------
+
+### displaced
+
+这个比较容易混淆。
+
+例如：
+
+删除 B：
+
+```
+A y=0
+B y=50
+C y=100
+```
+
+删除 B 后：
+
+```
+A y=0
+C y=50
+```
+
+C 被挤下来。
+
+C 不是 move 操作，但是位置变了。
+
+这个叫：
+
+> displaced（被重新布局影响）
+
+所以：
+
+```qml
+displaced: displacedTransition
+```
+
+负责：
+
+```
+其它delegate位置变化动画
+```
+
+------
+
+## 4. 为什么 Qt 文档不告诉你应该用什么 Animation？
+
+因为 `Transition` 是通用机制。
+
+Qt 不知道你的 UI 意图。
+
+例如：
+
+一个聊天窗口：
+
+新增消息：
+
+```
+opacity 0 -> 1
+```
+
+比较自然。
+
+一个购物车：
+
+新增商品：
+
+```
+scale 0 -> 1
+```
+
+比较自然。
+
+一个表格：
+
+插入行：
+
+```
+y方向移动
+```
+
+比较自然。
+
+所以 Qt 只定义：
+
+```
+事件
+ |
+ ↓
+Transition
+ |
+ ↓
+你选择 Animation
+```
+
+而不是：
+
+```
+add = FadeAnimation
+remove = SlideAnimation
+```
+
+因为这是设计层面的事情。
+
+------
+
+## 5. ListView 常见组合
+
+### 插入淡入
+
+```qml
+add: Transition {
+
+    NumberAnimation {
+        property: "opacity"
+        from:0
+        to:1
+        duration:300
+    }
+}
+```
+
+------
+
+### 删除缩小
+
+```qml
+remove: Transition {
+
+    NumberAnimation {
+        properties:"scale"
+        from:1
+        to:0
+        duration:300
+    }
+}
+```
+
+------
+
+### 列表移动
+
+```qml
+move: Transition {
+
+    NumberAnimation {
+        properties:"x,y"
+        duration:300
+    }
+}
+```
+
+------
+
+### 位置自动调整
+
+```qml
+displaced: Transition {
+
+    NumberAnimation {
+        properties:"x,y"
+        duration:300
+    }
+}
+```
+
+------
+
+所以你的理解可以总结为：
+
+```
+ListView
+    |
+    | add/remove/move/displaced
+    ↓
+Transition  (什么时候动画)
+    |
+    ↓
+Animation   (怎么动画)
+```
+
+`Transition` 是事件和动画之间的桥梁，而 `Animation` 是具体的时间插值算法。QML 把两者分开，是为了让同一个动画机制可以被 State、ListView、Behavior 等多个系统复用。
